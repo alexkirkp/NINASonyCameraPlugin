@@ -253,6 +253,9 @@ namespace Sony {
         }
 
         public UInt32 StartCapture(UInt32 hDevice, float exposureTime) {
+            // Never let a failed or cancelled exposure fall back to the previous frame
+            _lastImage = null;
+
             PropertyValue value = new PropertyValue();
 
             fSetExposureTime(hDevice, exposureTime, ref value);

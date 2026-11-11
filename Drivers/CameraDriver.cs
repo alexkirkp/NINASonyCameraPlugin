@@ -547,6 +547,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 uint[] completionStates = { CAPTURE_CANCELLED, CAPTURE_COMPLETE, CAPTURE_FAILED };
 
                 SonyDriver driver = SonyDriver.GetInstance();
+                uint finalStatus = CAPTURE_CREATED;
 
                 try {
                     uint captureStatus = driver.GetCaptureStatus(_camera.Handle);
@@ -559,9 +560,20 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                     }
 
                     Logger.Info($"Wait for image ready complete, completion state is {captureStatus}");
+                    finalStatus = captureStatus;
+                } catch (OperationCanceledException) {
+                    throw;
                 } catch (Exception ex) {
                     Logger.Error("WaitUntilExposureIsReady got exception", ex);
                     throw new SonyException("Problem while waiting for image to be ready (see log)");
+                }
+
+                if (finalStatus == CAPTURE_FAILED) {
+                    throw new SonyException("Exposure failed (see log)");
+                }
+
+                if (finalStatus == CAPTURE_CANCELLED) {
+                    throw new OperationCanceledException("Exposure was cancelled");
                 }
             }
         }
@@ -569,6 +581,10 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         public Task<IExposureData> DownloadExposure(CancellationToken token) {
             return Task.Run<IExposureData>(() => {
                 byte[] rawImageData = SonyDriver.GetInstance().GetLastImage();
+
+                if (rawImageData == null) {
+                    throw new SonyException("No image available from the camera");
+                }
 
                 var metaData = new ImageMetaData();
 
