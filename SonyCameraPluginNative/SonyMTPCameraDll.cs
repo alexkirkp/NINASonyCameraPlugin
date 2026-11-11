@@ -37,6 +37,14 @@ namespace Sony {
         internal SonyException(string message) : base(message) { }
     }
 
+    internal class CameraUnpluggedException : SonyException {
+        internal CameraUnpluggedException() : base("The camera was unplugged") { }
+
+        internal CameraUnpluggedException(bool reconnecting) : base(reconnecting
+            ? "The camera was unplugged and the plugin is trying to reconnect it; retry the exposure"
+            : "The camera was unplugged and did not come back") { }
+    }
+
     #region DLL Class
     internal class SonyMTPCameraDll {
         internal const string MINIMUM_DLL_VERSION_STRING = "1.0.1.17";
@@ -88,6 +96,9 @@ namespace Sony {
         private dSetFocusPosition fSetFocusPosition;
         private dGetFocusPosition fGetFocusPosition;
         private dGetFocusLimit fGetFocusLimit;
+
+        // Optional export: absent from DLLs older than the one that added IsCameraRemoved
+        private dIsCameraRemoved fIsCameraRemoved;
 #pragma warning restore 0649
 
         private string[] DllFunctions = {
@@ -135,7 +146,20 @@ namespace Sony {
             foreach (var functionName in DllFunctions) {
                 SetupDelegate(functionName);
             }
+
+            IntPtr removedPtr = Kernel32.GetProcAddress(_dllHandle, "IsCameraRemoved");
+
+            if (removedPtr != IntPtr.Zero) {
+                fIsCameraRemoved = Marshal.GetDelegateForFunctionPointer<dIsCameraRemoved>(removedPtr);
+            } else {
+                Logger.Warning($"Sony driver dll {filename} has no IsCameraRemoved export; unplugging the camera will not be detected. Is a stale copy being loaded?");
+            }
         }
+
+        /// <summary>
+        /// True if the DLL exports IsCameraRemoved, so unplug detection is available.
+        /// </summary>
+        internal bool CanDetectRemoval => fIsCameraRemoved != null;
 
         internal int CompareVersions(int[] lhs, int[] rhs) {
             if (lhs[0] == rhs[0] && lhs[1] == rhs[1] && lhs[2] == rhs[2] && lhs[3] == rhs[3]) {
@@ -256,10 +280,7 @@ namespace Sony {
             // Never let a failed or cancelled exposure fall back to the previous frame
             _lastImage = null;
 
-            PropertyValue value = new PropertyValue();
-
-            fSetExposureTime(hDevice, exposureTime, ref value);
-
+            // The shutter speed is set by the caller (SetExposureTime) so a failure can be reported
             ImageInfo info = new ImageInfo {
                 ImageMode = IMAGEMODE_PASSTHRU,
                 ExposureTime = (double)exposureTime,
@@ -384,8 +405,10 @@ namespace Sony {
         public PropertyValue SetExposureTime(UInt32 hCamera, float exposureTime) {
             PropertyValue valueOut = new PropertyValue();
 
-            if (fSetExposureTime(hCamera, exposureTime, ref valueOut) != ERROR_SUCCESS) {
-                throw new SonyException("Error setting exposure time");
+            UInt32 result = fSetExposureTime(hCamera, exposureTime, ref valueOut);
+
+            if (result != ERROR_SUCCESS) {
+                throw new SonyException($"Error setting exposure time to {exposureTime}s (error 0x{result:X8})");
             }
 
             return valueOut;
@@ -435,6 +458,23 @@ namespace Sony {
         public UInt32 GetFocusLimit(UInt32 hCamera) {
             return fGetFocusLimit(hCamera);
         }
+
+        /// <summary>
+        /// Whether the DLL has seen the camera removed. False if the DLL cannot say.
+        /// </summary>
+        public bool IsCameraRemoved(UInt32 hCamera) {
+            if (fIsCameraRemoved == null) {
+                return false;
+            }
+
+            int removed = 0;
+
+            if (fIsCameraRemoved(hCamera, ref removed) != ERROR_SUCCESS) {
+                return false;
+            }
+
+            return removed != 0;
+        }
         #endregion
 
         #region Delegate definitions
@@ -464,6 +504,7 @@ namespace Sony {
         internal delegate UInt32 dSetFocusPosition(UInt32 hCamera, ref UInt32 position);
         internal delegate UInt32 dGetFocusPosition(UInt32 hCamera);
         internal delegate UInt32 dGetFocusLimit(UInt32 hCamera);
+        internal delegate UInt32 dIsCameraRemoved(UInt32 hCamera, ref int removed);
 
         internal delegate UInt32 dGetLensCount();
         internal delegate UInt32 dGetLensInfo(UInt32 offset, ref LensInfo info);

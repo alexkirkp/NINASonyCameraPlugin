@@ -46,5 +46,77 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Properties {
                 this["DefaultNotificationMessage"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("60")]
+        public int ReconnectGraceSeconds {
+            get {
+                return ((int)(this["ReconnectGraceSeconds"]));
+            }
+            set {
+                this["ReconnectGraceSeconds"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool SetManualExposureMode {
+            get {
+                return ((bool)(this["SetManualExposureMode"]));
+            }
+            set {
+                this["SetManualExposureMode"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool SetSingleDrive {
+            get {
+                return ((bool)(this["SetSingleDrive"]));
+            }
+            set {
+                this["SetSingleDrive"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool SetManualFocus {
+            get {
+                return ((bool)(this["SetManualFocus"]));
+            }
+            set {
+                this["SetManualFocus"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool SetWidestAperture {
+            get {
+                return ((bool)(this["SetWidestAperture"]));
+            }
+            set {
+                this["SetWidestAperture"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public int SaveDestination {
+            get {
+                return ((int)(this["SaveDestination"]));
+            }
+            set {
+                this["SaveDestination"] = value;
+            }
+        }
     }
 }

@@ -122,6 +122,81 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera {
             }
         }
 
+        /// <summary>
+        /// How long (seconds) to keep trying to reopen a camera that was unplugged before reporting it
+        /// as disconnected. 0 turns automatic reconnect off.
+        /// </summary>
+        public int ReconnectGraceSeconds {
+            get {
+                return Settings.Default.ReconnectGraceSeconds;
+            }
+            set {
+                Settings.Default.ReconnectGraceSeconds = Math.Max(0, value);
+                CoreUtil.SaveSettings(Settings.Default);
+                RaisePropertyChanged();
+            }
+        }
+
+        /// <summary>On connect, take PC control of the mode and select Manual (M) exposure mode, whatever the dial is set to. Not undone on disconnect: the camera stays in the mode the plugin set until the dial is moved.</summary>
+        public bool SetManualExposureMode {
+            get {
+                return Settings.Default.SetManualExposureMode;
+            }
+            set {
+                Settings.Default.SetManualExposureMode = value;
+                CoreUtil.SaveSettings(Settings.Default);
+                RaisePropertyChanged();
+            }
+        }
+
+        /// <summary>On connect, select single-shot drive (BULB is only offered in single drive).</summary>
+        public bool SetSingleDrive {
+            get {
+                return Settings.Default.SetSingleDrive;
+            }
+            set {
+                Settings.Default.SetSingleDrive = value;
+                CoreUtil.SaveSettings(Settings.Default);
+                RaisePropertyChanged();
+            }
+        }
+
+        /// <summary>On connect, select manual focus (needed for NINA's focuser). A lens AF/MF switch set to AF blocks this.</summary>
+        public bool SetManualFocus {
+            get {
+                return Settings.Default.SetManualFocus;
+            }
+            set {
+                Settings.Default.SetManualFocus = value;
+                CoreUtil.SaveSettings(Settings.Default);
+                RaisePropertyChanged();
+            }
+        }
+
+        /// <summary>On connect, select the widest aperture the attached lens reports.</summary>
+        public bool SetWidestAperture {
+            get {
+                return Settings.Default.SetWidestAperture;
+            }
+            set {
+                Settings.Default.SetWidestAperture = value;
+                CoreUtil.SaveSettings(Settings.Default);
+                RaisePropertyChanged();
+            }
+        }
+
+        /// <summary>On connect, where images are saved: 0 = leave as is, 1 = PC only, 2 = PC + card. Card only is never offered, as no image would reach NINA.</summary>
+        public int SaveDestination {
+            get {
+                return Settings.Default.SaveDestination;
+            }
+            set {
+                Settings.Default.SaveDestination = Math.Max(0, Math.Min(2, value));
+                CoreUtil.SaveSettings(Settings.Default);
+                RaisePropertyChanged();
+            }
+        }
+
         public string ProfileSpecificNotificationMessage {
             get {
                 return pluginSettings.GetValueString(nameof(ProfileSpecificNotificationMessage), string.Empty);

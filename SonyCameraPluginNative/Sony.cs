@@ -73,12 +73,20 @@ namespace Sony
             return _sonydll.GetCaptureStatus(handle);
         }
 
+        public void SetExposureTime(uint handle, float exposureTime) {
+            _sonydll.SetExposureTime(handle, exposureTime);
+        }
+
         public void StartCapture(uint handle, float exposureTime) {
             _sonydll.StartCapture(handle, exposureTime);
         }
 
         public void CancelCapture(uint handle) {
             _sonydll.CancelCapture(handle);
+        }
+
+        public bool IsCameraRemoved(uint handle) {
+            return _sonydll.IsCameraRemoved(handle);
         }
 
         public byte[] GetLastImage() {

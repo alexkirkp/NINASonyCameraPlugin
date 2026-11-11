@@ -21,6 +21,7 @@ using NINA.Image.Interfaces;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
 using Sony;
+using PluginSettings = NINA.RetroKiwi.Plugin.SonyCamera.Properties.Settings;
 
 namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
     public class CameraDriver : BaseINPC, ICamera {
@@ -57,6 +58,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         #region Internal Helpers
 
         private PropertyValue GetPropertyValue(uint id) {
+            ThrowIfNotUsable();
             return SonyDriver.GetInstance().GetProperty(_camera.Handle, id);
         }
 
@@ -225,7 +227,11 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         public int BatteryLevel {
             get {
                 if (_camera != null) {
-                    return (int)GetPropertyValue(PROPID_BATTERY).Value;
+                    try {
+                        return (int)GetPropertyValue(PROPID_BATTERY).Value;
+                    } catch (CameraUnpluggedException) {
+                        return 0; // unplugged or reconnecting
+                    }
                 } else {
                     return 0;
                 }
@@ -281,6 +287,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                         PropertyValue value = GetPropertyValue(PROPID_ISO);
 
                         return (int)(value.Value == 0xffffff ? 0 : value.Value);
+                    } catch (CameraUnpluggedException) {
+                        return -1; // expected while unplugged or reconnecting; NINA polls this
                     } catch (Exception ex) {
                         Logger.Error("Problem getting gain", ex);
                         return -1;
@@ -293,8 +301,17 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             set {
                 if (_camera != null) {
                     try {
+                        if (GetLinkState() == LinkState.Reconnecting) {
+                            // Applied once the camera is back, so a change made during a drop isn't lost
+                            _pendingGain = value;
+                            Logger.Info($"Camera is reconnecting; gain {value} will be set when it is back");
+                            return;
+                        }
+
                         SonyDriver.GetInstance().SetProperty(_camera.Handle, PROPID_ISO, (uint)value);
                         RaisePropertyChanged(nameof(Gain));
+                    } catch (CameraUnpluggedException) {
+                        // Window ran out; nothing to set on a camera that is gone
                     } catch (Exception ex) {
                         Logger.Error($"Problem setting gain to {value}", ex);
                     }
@@ -334,9 +351,244 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         public bool Connected {
             get {
-                return _camera != null;
+                // Stays true while a reconnect is being attempted, so NINA never sees a brief drop
+                return _camera != null && GetLinkState() != LinkState.Lost;
             }
         }
+
+        #region Unplug / reconnect
+
+        private enum LinkState { Ok, Reconnecting, Lost }
+
+        private readonly object _linkLock = new object();
+        private DateTime? _dropStartedUtc;          // set while a reconnect is in progress
+        private bool _gaveUp;                       // the grace window ran out; camera reported disconnected
+        private bool _deadHandleClosed;             // the loop has already closed the removed camera's handle
+        private CancellationTokenSource _reconnectCts;
+        private TaskCompletionSource<bool> _reconnected;
+        private int? _pendingGain;                  // gain NINA set during the window
+        private CaptureSequence _pendingExposure;  // started during the window; begun once reconnected
+
+        private static readonly TimeSpan ReconnectRetryInterval = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// Combines the DLL's removed flag with the reconnect state. The first time a removal is seen
+        /// this starts the reconnect (or, if the grace window is 0, gives up straight away).
+        /// </summary>
+        private LinkState GetLinkState() {
+            if (_camera == null) {
+                return LinkState.Ok;
+            }
+
+            lock (_linkLock) {
+                if (_gaveUp) {
+                    return LinkState.Lost;
+                }
+
+                if (_dropStartedUtc != null) {
+                    return LinkState.Reconnecting;
+                }
+
+                if (!IsCameraRemoved()) {
+                    return LinkState.Ok;
+                }
+
+                var window = TimeSpan.FromSeconds(Math.Max(0, PluginSettings.Default.ReconnectGraceSeconds));
+
+                if (window == TimeSpan.Zero) {
+                    _gaveUp = true;
+                    return LinkState.Lost;
+                }
+
+                _dropStartedUtc = DateTime.UtcNow;
+                _reconnected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _reconnectCts = new CancellationTokenSource();
+
+                var oldCamera = _camera;
+                var cts = _reconnectCts;
+                var started = _dropStartedUtc.Value;
+
+                Logger.Warning($"Sony camera unplugged; trying to reconnect for up to {window.TotalSeconds:0} s");
+                Task.Run(() => ReconnectLoop(oldCamera, started, window, cts.Token));
+
+                return LinkState.Reconnecting;
+            }
+        }
+
+        private void ThrowIfNotUsable() {
+            var state = GetLinkState();
+
+            if (state != LinkState.Ok) {
+                throw new CameraUnpluggedException(state == LinkState.Reconnecting);
+            }
+        }
+
+        private async Task ReconnectLoop(SonyCameraInfo oldCamera, DateTime started, TimeSpan window, CancellationToken token) {
+            var driver = SonyDriver.GetInstance();
+
+            try {
+                driver.CloseCamera(oldCamera.Handle);
+            } catch (Exception ex) {
+                Logger.Warning($"Closing the removed camera handle failed (ignored): {ex.Message}");
+            }
+
+            lock (_linkLock) {
+                _deadHandleClosed = true;
+            }
+
+            while (!token.IsCancellationRequested && DateTime.UtcNow - started < window) {
+                try {
+                    var device = FindDevice(driver);
+
+                    if (device != null) {
+                        var reopened = driver.OpenCamera(device.Id);
+
+                        lock (_linkLock) {
+                            if (token.IsCancellationRequested) {
+                                // Disconnect() ran while we were opening; don't resurrect the connection
+                                try { driver.CloseCamera(reopened.Handle); } catch (Exception) { }
+                                return;
+                            }
+
+                            Logger.Info(device.Id == _device.Id
+                                ? "Reconnect: camera has the same device id as before"
+                                : $"Reconnect: camera device id changed from {_device.Id} to {device.Id}");
+
+                            _device = device;
+                            _camera = reopened;
+                            _dropStartedUtc = null;
+                            _deadHandleClosed = false;
+                            _removalLogged = false;
+                        }
+
+                        try {
+                            ShootingSetup.Apply(reopened); // connect-time settings are lost with the old handle
+                        } catch (Exception ex) {
+                            Logger.Error(ex);
+                        }
+
+                        var gain = _pendingGain;
+                        _pendingGain = null;
+
+                        if (gain != null) {
+                            try {
+                                driver.SetProperty(reopened.Handle, PROPID_ISO, (uint)gain.Value);
+                            } catch (Exception ex) {
+                                Logger.Error($"Problem setting gain to {gain} after reconnect", ex);
+                            }
+                        }
+
+                        var seconds = (DateTime.UtcNow - started).TotalSeconds;
+                        Logger.Warning($"Sony camera reconnected after {seconds:0} s");
+                        Notification.ShowWarning($"Sony camera was unplugged and reconnected after {seconds:0} s");
+                        NotifyGainPropertiesChanged();
+                        _reconnected.TrySetResult(true);
+                        return;
+                    }
+                } catch (Exception ex) {
+                    Logger.Debug($"Reconnect attempt failed: {ex.Message}");
+                }
+
+                try {
+                    await Task.Delay(ReconnectRetryInterval, token);
+                } catch (OperationCanceledException) {
+                    return;
+                }
+            }
+
+            if (token.IsCancellationRequested) {
+                return;
+            }
+
+            lock (_linkLock) {
+                _gaveUp = true;
+            }
+
+            Logger.Error($"Sony camera did not come back within {window.TotalSeconds:0} s; reporting it as disconnected");
+            Notification.ShowError("Sony camera was unplugged and did not come back. Reconnect it and press Connect.");
+            _reconnected.TrySetResult(false);
+        }
+
+        /// <summary>
+        /// Finds the camera again after a replug: the same device id if it is still there, otherwise
+        /// the one device of the same make and model.
+        /// </summary>
+        private SonyDevice FindDevice(SonyDriver driver) {
+            var devices = driver.Cameras().ToList();
+
+            return devices.FirstOrDefault(d => d.Id == _device.Id)
+                ?? devices.FirstOrDefault(d => d.Manufacturer == _device.Manufacturer && d.Model == _device.Model);
+        }
+
+        private void ResetLinkState() {
+            CancellationTokenSource cts;
+
+            lock (_linkLock) {
+                cts = _reconnectCts;
+                _reconnectCts = null;
+                _dropStartedUtc = null;
+                _gaveUp = false;
+                _removalLogged = false;
+                _pendingExposure = null;
+                _pendingGain = null;
+            }
+
+            cts?.Cancel();
+            _reconnected?.TrySetResult(false);
+        }
+
+        /// <summary>
+        /// Waits for an in-progress reconnect. Returns normally once the camera is back; throws
+        /// CameraUnpluggedException if the window runs out, OperationCanceledException if cancelled.
+        /// </summary>
+        private async Task WaitForReconnect(CancellationToken token) {
+            var tcs = _reconnected;
+
+            if (tcs == null) {
+                return;
+            }
+
+            var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            using (token.Register(() => cancelled.TrySetCanceled())) {
+                var finished = await Task.WhenAny(tcs.Task, cancelled.Task);
+
+                token.ThrowIfCancellationRequested();
+
+                if (!await finished) {
+                    throw new CameraUnpluggedException(false);
+                }
+            }
+        }
+
+        #endregion
+
+        /// <summary>
+        /// The single place the plugin asks whether the camera has been unplugged.
+        /// </summary>
+        private bool IsCameraRemoved() {
+            var camera = _camera;
+
+            if (camera == null) {
+                return false;
+            }
+
+            try {
+                bool removed = SonyDriver.GetInstance().IsCameraRemoved(camera.Handle);
+
+                if (removed && !_removalLogged) {
+                    _removalLogged = true;
+                    Logger.Warning("The Sony camera has been unplugged");
+                }
+
+                return removed;
+            } catch (Exception ex) {
+                Logger.Error(ex);
+                return false;
+            }
+        }
+
+        private bool _removalLogged = false;
 
         public string Description {
             get {
@@ -456,10 +708,20 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         public Task<bool> Connect(CancellationToken token) {
             return Task.Run<bool>(() => {
                 try {
+                    ResetLinkState();
                     _camera = SonyDriver.GetInstance().OpenCamera(_device.Id);
                 } catch (Exception ex) {
                     Logger.Error(ex);
                     _camera = null;
+                }
+
+                if (_camera != null) {
+                    try {
+                        ShootingSetup.Apply(_camera);
+                    } catch (Exception ex) {
+                        // Never fail the connect over setup
+                        Logger.Error(ex);
+                    }
                 }
 
                 NotifyGainPropertiesChanged();
@@ -469,10 +731,24 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         public void Disconnect() {
             if (_camera != null) {
-                try {
-                    SonyDriver.GetInstance().CloseCamera(_camera.Handle);
-                } catch (Exception ex) {
-                    Logger.Error(ex);
+                bool alreadyClosed;
+
+                lock (_linkLock) {
+                    alreadyClosed = _deadHandleClosed;
+                }
+
+                ResetLinkState();
+
+                if (!alreadyClosed) {
+                    try {
+                        SonyDriver.GetInstance().CloseCamera(_camera.Handle);
+                    } catch (Exception ex) {
+                        Logger.Error(ex);
+                    }
+                }
+
+                lock (_linkLock) {
+                    _deadHandleClosed = false;
                 }
 
                 _camera = null;
@@ -482,6 +758,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         public Task<IExposureData> DownloadLiveView(CancellationToken token) {
             return Task.Run<IExposureData>(() => {
+                ThrowIfNotUsable();
+
                 using (var memStream = new MemoryStream(SonyDriver.GetInstance().GetLiveView(_camera.Handle))) {
                     memStream.Position = 0;
 
@@ -516,20 +794,78 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         public void StartExposure(CaptureSequence sequence) {
             if (_camera != null) {
-                SonyDriver driver = SonyDriver.GetInstance();
-                uint captureStatus = driver.GetCaptureStatus(_camera.Handle);
+                var state = GetLinkState();
 
-                if (captureStatus == CAPTURE_CAPTURING || captureStatus == CAPTURE_PROCESSING || captureStatus == CAPTURE_STARTING ||
-                    captureStatus == CAPTURE_READING || captureStatus == CAPTURE_PROCESSING) {
-                    Notification.ShowWarning("Another exposure still in progress. Cancelling it to start another.");
+                if (state == LinkState.Lost) {
+                    throw new CameraUnpluggedException(false);
                 }
 
-                // Tell the camera to cancel capture, we do this every time regardless - this will reset the status to be non-complete
-                driver.CancelCapture(_camera.Handle);
+                if (state == LinkState.Reconnecting) {
+                    // StartExposure can't wait, so remember it; WaitUntilExposureIsReady starts it
+                    // once the camera is back (and can honour NINA's cancellation token while waiting).
+                    Logger.Info("Camera is reconnecting; deferring the exposure until it is back");
+                    _pendingExposure = sequence;
+                    return;
+                }
 
-                double exposureTime = sequence.ExposureTime;
-                driver.StartCapture(_camera.Handle, (float)exposureTime); //);
+                BeginCapture(sequence);
             }
+        }
+
+        private void BeginCapture(CaptureSequence sequence) {
+            SonyDriver driver = SonyDriver.GetInstance();
+            uint captureStatus = driver.GetCaptureStatus(_camera.Handle);
+
+            if (captureStatus == CAPTURE_CAPTURING || captureStatus == CAPTURE_PROCESSING || captureStatus == CAPTURE_STARTING ||
+                captureStatus == CAPTURE_READING || captureStatus == CAPTURE_PROCESSING) {
+                Notification.ShowWarning("Another exposure still in progress. Cancelling it to start another.");
+            }
+
+            // Tell the camera to cancel capture, we do this every time regardless - this will reset the status to be non-complete
+            driver.CancelCapture(_camera.Handle);
+
+            double exposureTime = sequence.ExposureTime;
+
+            // Set the shutter speed (BULB above 30 s) rather than shooting at whatever the camera was left on
+            try {
+                driver.SetExposureTime(_camera.Handle, (float)exposureTime);
+                VerifyShutterSpeed(driver, exposureTime);
+            } catch (SonyException e) {
+                Logger.Error($"Could not set the shutter speed for a {exposureTime}s exposure: {e.Message}");
+                throw new SonyException($"Could not set the camera's shutter speed for a {exposureTime}s exposure: {e.Message}");
+            }
+
+            driver.StartCapture(_camera.Handle, (float)exposureTime);
+        }
+
+        private const uint PROPERTY_SHUTTER_SPEED = 0xD20D;
+        private const double LONGEST_TIMED_SPEED = 30.0;
+
+        /// <summary>
+        /// The camera can accept a shutter write and still end up somewhere unusable (e.g. S mode has
+        /// no BULB, so a long request lands on 30"). Read the speed back and refuse to shoot if it
+        /// can't give the requested length.
+        /// </summary>
+        private void VerifyShutterSpeed(SonyDriver driver, double exposureTime) {
+            if (exposureTime <= LONGEST_TIMED_SPEED) {
+                return;
+            }
+
+            // The camera reports the new value asynchronously; give it a moment
+            for (int i = 0; i < 10; i++) {
+                var property = driver.GetProperty(_camera.Handle, PROPERTY_SHUTTER_SPEED);
+                Logger.Info($"Shutter speed read back for a {exposureTime}s exposure: id 0x{property.Id:X}, value 0x{property.Value:X}, text '{property.Text}'");
+
+                // An unrendered property comes back all zero, so require the id to match before trusting 0 as BULB
+                if (property.Id == PROPERTY_SHUTTER_SPEED && property.Value == 0) {
+                    return; // BULB
+                }
+
+                Thread.Sleep(100);
+            }
+
+            throw new SonyException(
+                $"The camera did not go to BULB for a {exposureTime}s exposure and would stop at its own speed; set the camera to M (manual) mode.");
         }
 
         public void StopExposure() {
@@ -537,7 +873,10 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         }
 
         public void AbortExposure() {
-            if (_camera != null) {
+            _pendingExposure = null;
+
+            // Nothing to cancel on a camera that is gone or being reopened
+            if (_camera != null && GetLinkState() == LinkState.Ok) {
                 SonyDriver.GetInstance().CancelCapture(_camera.Handle);
             }
         }
@@ -550,12 +889,24 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 uint finalStatus = CAPTURE_CREATED;
 
                 try {
+                    var pending = _pendingExposure;
+
+                    if (pending != null) {
+                        Logger.Info("Waiting for the camera to reconnect before starting the exposure");
+                        await WaitForReconnect(token);
+                        _pendingExposure = null;
+                        BeginCapture(pending);
+                    }
+
                     uint captureStatus = driver.GetCaptureStatus(_camera.Handle);
                     Logger.Info(
                         $"Waiting for image to be ready, current state is {captureStatus}, completion states are {String.Join(", ", completionStates)}");
 
                     while (!completionStates.Contains(captureStatus)) {
                         await CoreUtil.Wait(TimeSpan.FromMilliseconds(100), token);
+
+                        ThrowIfNotUsable();
+
                         captureStatus = driver.GetCaptureStatus(_camera.Handle);
                     }
 
@@ -563,6 +914,11 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                     finalStatus = captureStatus;
                 } catch (OperationCanceledException) {
                     throw;
+                } catch (CameraUnpluggedException) {
+                    throw;
+                } catch (Exception ex) when (GetLinkState() != LinkState.Ok) {
+                    Logger.Error("WaitUntilExposureIsReady failed after the camera was unplugged", ex);
+                    throw new CameraUnpluggedException(GetLinkState() == LinkState.Reconnecting);
                 } catch (Exception ex) {
                     Logger.Error("WaitUntilExposureIsReady got exception", ex);
                     throw new SonyException("Problem while waiting for image to be ready (see log)");

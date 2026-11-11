@@ -6,6 +6,35 @@
     <!--  In order for this datatemplate to be picked correctly, the key has to follow the naming convention of <IPlugin.Name>_Options -->
     <!--  Furthermore the Resource Dictionary has to be exported via code behind export attributes  -->
     <DataTemplate x:Key="Sony Camera Plugin_Options">
+        <StackPanel Orientation="Vertical">
+        <StackPanel Orientation="Horizontal" Margin="0,5,0,5">
+            <TextBlock VerticalAlignment="Center" Text="Reconnect after unplug for up to (seconds, 0 = off)" />
+            <TextBox MinWidth="50" Margin="10,0,0,0" VerticalAlignment="Center" Text="{Binding ReconnectGraceSeconds, UpdateSourceTrigger=LostFocus}" />
+        </StackPanel>
+        <StackPanel Orientation="Vertical" Margin="0,5,0,5">
+            <TextBlock FontWeight="Bold" Text="Apply on connect (unticked options leave the camera alone)" />
+            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                <CheckBox VerticalAlignment="Center" IsChecked="{Binding SetManualExposureMode}" />
+                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Manual exposure mode (takes PC control from the mode dial; the camera stays in M after disconnect)" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                <CheckBox VerticalAlignment="Center" IsChecked="{Binding SetSingleDrive}" />
+                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Single-shot drive (needed for BULB)" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                <CheckBox VerticalAlignment="Center" IsChecked="{Binding SetManualFocus}" />
+                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Manual focus (the lens's AF/MF switch must be on MF)" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                <CheckBox VerticalAlignment="Center" IsChecked="{Binding SetWidestAperture}" />
+                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Widest aperture the lens reports" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                <TextBlock VerticalAlignment="Center" Text="Save images to (0 = leave, 1 = PC only, 2 = PC + card)" />
+                <TextBox MinWidth="30" Margin="10,0,0,0" VerticalAlignment="Center" Text="{Binding SaveDestination, UpdateSourceTrigger=LostFocus}" />
+            </StackPanel>
+        </StackPanel>
+        </StackPanel>
         <!--        <StackPanel Orientation="Vertical"> -->
     <!--            <StackPanel Orientation="Horizontal"> -->
     <!--                <TextBlock Text="Default Notification Message" /> -->
