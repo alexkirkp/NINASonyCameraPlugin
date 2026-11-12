@@ -53,7 +53,6 @@ namespace Sony {
     #region DLL Class
     internal class SonyMTPCameraDll {
         internal const string MINIMUM_DLL_VERSION_STRING = "1.0.1.17";
-        internal readonly int[] MINIMUM_DLL_VERSION = { 1, 0, 1, 17 };
 
         internal const UInt32 ERROR_SUCCESS = 0;
         internal const UInt32 ERROR_ACCESS_DENIED = 5;
@@ -136,18 +135,19 @@ namespace Sony {
             int l = Kernel32.GetModuleFileName(_dllHandle, buffer, 256);
             string filename = new string(buffer, 0, l);
 
-            // Confirm the driver version meets the minimum required 1.0.1.16
+            ArrayPool<char>.Shared.Return(buffer);
+
+            // Confirm the driver version meets MINIMUM_DLL_VERSION_STRING
             FileVersionInfo dllVersion = FileVersionInfo.GetVersionInfo(filename);
 
-            int[] v = { dllVersion.ProductMajorPart, dllVersion.ProductMinorPart, dllVersion.ProductPrivatePart, dllVersion.ProductBuildPart };
-
-            if (dllVersion == null) {
+            // GetVersionInfo never returns null; a DLL without version info has a null ProductVersion
+            if (dllVersion == null || string.IsNullOrEmpty(dllVersion.ProductVersion)) {
                 throw new SonyException("The loaded Sony dll does not have version info - this is invalid");
             }
 
             Logger.Info($"Using Sony driver dll @ {filename} with version {dllVersion.ProductVersion}");
 
-            if (CompareVersions(v, MINIMUM_DLL_VERSION) < 0) {
+            if (!MeetsMinimumVersion(dllVersion.ProductMajorPart, dllVersion.ProductMinorPart, dllVersion.ProductBuildPart, dllVersion.ProductPrivatePart)) {
                 throw new SonyException($"The installed driver is version {dllVersion.ProductVersion}, version {MINIMUM_DLL_VERSION_STRING} or later is required");
             }
 
@@ -171,28 +171,12 @@ namespace Sony {
         /// </summary>
         internal bool CanDetectRemoval => fIsCameraRemoved != null;
 
-        internal int CompareVersions(int[] lhs, int[] rhs) {
-            if (lhs[0] == rhs[0] && lhs[1] == rhs[1] && lhs[2] == rhs[2] && lhs[3] == rhs[3]) {
-                return 0;
-            }
-
-            if (lhs[0] < rhs[0]) {
-                return -1;
-            }
-
-            if (lhs[0] == rhs[0] && lhs[1] < rhs[1]) {
-                return -1;
-            }
-
-            if (lhs[0] == rhs[0] && lhs[1] == rhs[1] && lhs[2] < rhs[2]) {
-                return -1;
-            }
-
-            if (lhs[0] == rhs[0] && lhs[1] == rhs[1] && lhs[2] == rhs[2] && lhs[3] < rhs[3]) {
-                return -1;
-            }
-
-            return 1;
+        /// <summary>
+        /// True if major.minor.build.revision is at or above MINIMUM_DLL_VERSION_STRING.
+        /// Note FileVersionInfo's "Build" part is the third number and "Private" the fourth.
+        /// </summary>
+        internal static bool MeetsMinimumVersion(int major, int minor, int build, int revision) {
+            return new Version(major, minor, build, revision) >= new Version(MINIMUM_DLL_VERSION_STRING);
         }
 
         internal void SetupDelegate(string functionName) {
