@@ -843,6 +843,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         private const uint PROPERTY_SHUTTER_TYPE = 0xD0DF; // 2 = mechanical, 3 = electronic
         private const uint SHUTTER_MECHANICAL = 2;
+        private const int SHUTTER_TYPE_SETTLE_MS = 1500;
         private const uint SHUTTER_ELECTRONIC = 3;
 
         /// <summary>
@@ -871,6 +872,19 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                 Logger.Info($"Setting shutter type to {(wanted == SHUTTER_ELECTRONIC ? "electronic" : "mechanical")} for a {sequence.ImageType} exposure of {exposureTime}s");
                 driver.SetProperty(_camera.Handle, PROPERTY_SHUTTER_TYPE, wanted);
+
+                // The camera rebuilds its shutter speed list for the new type (the electronic one has no
+                // BULB) and can reset the speed while it does. Wait for the type to show, then let the
+                // list settle, so the speed written next isn't overwritten.
+                for (int i = 0; i < 20; i++) {
+                    var now = driver.GetProperty(_camera.Handle, PROPERTY_SHUTTER_TYPE);
+                    if (now.Id == PROPERTY_SHUTTER_TYPE && now.Value == wanted) {
+                        break;
+                    }
+                    Thread.Sleep(100);
+                }
+
+                Thread.Sleep(SHUTTER_TYPE_SETTLE_MS);
             } catch (Exception e) {
                 Logger.Warning($"Could not set the shutter type: {e.Message}");
             }
@@ -886,6 +900,12 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         /// </summary>
         private void VerifyShutterSpeed(SonyDriver driver, double exposureTime) {
             if (exposureTime <= LONGEST_TIMED_SPEED) {
+                try {
+                    var set = driver.GetProperty(_camera.Handle, PROPERTY_SHUTTER_SPEED);
+                    Logger.Info($"Shutter speed read back for a {exposureTime}s exposure: value 0x{set.Value:X}, text '{set.Text}'");
+                } catch (Exception e) {
+                    Logger.Warning($"Could not read back the shutter speed: {e.Message}");
+                }
                 return;
             }
 
