@@ -45,6 +45,21 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         public bool IsMoving { get => _moving; }
 
+        /// <summary>
+        /// Reads a focus value, treating a DLL error as the focuser going away: it reports itself
+        /// disconnected so NINA drops it, and the read throws rather than returning a made-up number.
+        /// </summary>
+        private int ReadFocusValue(Func<uint> read) {
+            try {
+                return (int)read();
+            } catch (SonyException ex) {
+                Logger.Error($"Sony lens focuser: {ex.Message}; marking the focuser disconnected");
+                _connected = false;
+                _moving = false;
+                throw;
+            }
+        }
+
         private uint GetCameraHandle() {
             SonyCameraInfo camera = SonyDriver.GetInstance().CameraInfo;
 
@@ -62,7 +77,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 uint hCamera = GetCameraHandle();
 
                 if (hCamera != 0) {
-                    return (int)SonyDriver.GetInstance().GetFocusLimit(hCamera);
+                    return ReadFocusValue(() => SonyDriver.GetInstance().GetFocusLimit(hCamera));
                 }
                 else {
                     return 0;
@@ -77,7 +92,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 uint hCamera = GetCameraHandle();
 
                 if (hCamera != 0) {
-                    return (int)SonyDriver.GetInstance().GetFocusPosition(hCamera);
+                    return ReadFocusValue(() => SonyDriver.GetInstance().GetFocusPosition(hCamera));
                 } else {
                     return 0;
                 }

@@ -59,6 +59,10 @@ namespace Sony {
         internal const UInt32 ERROR_ACCESS_DENIED = 5;
         internal const UInt32 ERROR_RETRY = 1237;
         internal const UInt32 INVALID_HANDLE_VALUE = 0xffffffff;
+        // GetFocusPosition/GetFocusLimit return this on failure (real values are UINT16).
+        // DLLs older than the one that added it return ERROR_INVALID_HANDLE (6) instead,
+        // which can't be told apart from a real value.
+        internal const UInt32 FOCUS_ERROR = 0xffffffff;
 
         internal const UInt32 IMAGEMODE_RAW = 1;
         internal const UInt32 IMAGEMODE_RGB = 2;
@@ -455,7 +459,13 @@ namespace Sony {
         }
 
         public UInt32 GetFocusPosition(UInt32 hCamera) {
-            return fGetFocusPosition(hCamera);
+            UInt32 position = fGetFocusPosition(hCamera);
+
+            if (position == FOCUS_ERROR) {
+                throw new SonyException("Unable to read the focus position");
+            }
+
+            return position;
         }
 
         public void SetFocusPosition(UInt32 hCamera, UInt32 focusPosition) {
@@ -468,7 +478,13 @@ namespace Sony {
         }
 
         public UInt32 GetFocusLimit(UInt32 hCamera) {
-            return fGetFocusLimit(hCamera);
+            UInt32 limit = fGetFocusLimit(hCamera);
+
+            if (limit == FOCUS_ERROR) {
+                throw new SonyException("Unable to read the focus limit");
+            }
+
+            return limit;
         }
 
         /// <summary>
