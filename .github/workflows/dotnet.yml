@@ -1,4 +1,4 @@
-# This workflow will build a .NET project
+# Builds the plugin, runs the tests and uploads the plugin DLL.
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
 
 name: Build Driver DLL
@@ -14,32 +14,18 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
-#    - name: Setup .NET
-#      uses: actions/setup-dotnet@v3
-#      with:
-#        dotnet-version: 4.8.1
+    - uses: actions/checkout@v4
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v1.1
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
 
-    - name: Setup NuGet
-      uses: nuget/setup-nuget@v1.2.0
-
-    - name: Navigate to Workspace
-      run: cd $GITHUB_WORKSPACE
-
-    - name: Create Build Directory
-      run: mkdir _build
-
-    - name: Restore Packages
-      run: nuget restore NINASonyCameraPlugin.sln
-      
     - name: Build
-      run: msbuild.exe NINASonyCameraPlugin.sln /nologo /nr:false /p:DeployOnBuild=true /p:DeployDefaultTarget=WebPublish /p:WebPublishMethod=FileSystem /p:DeleteExistingFiles=True /p:platform="Any CPU" /p:configuration="Release" /p:PublishUrl="../_build"
+      run: dotnet build NINASonyCameraPlugin.sln --configuration Release --nologo
 
     - name: Test
-      run: dotnet test NINASonyCameraPlugin.Tests/NINASonyCameraPlugin.Tests.csproj --configuration Release --nologo
+      run: dotnet test NINASonyCameraPlugin.sln --configuration Release --no-build --nologo
 
     - name: Upload SonyCamera DLL
       uses: actions/upload-artifact@v4
