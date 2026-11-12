@@ -26,7 +26,8 @@ namespace Sony
         byte[] GetLastImage();
         void ReleaseLastImage();
         void SetAttachedLens(uint handle, string path);
-        void SetFocusPosition(uint handle, uint position);
+        /// <summary>Moves the lens focus; returns the position the DLL reached, which can differ from the request.</summary>
+        uint SetFocusPosition(uint handle, uint position);
         uint GetFocusPosition(uint handle);
         uint GetFocusLimit(uint handle);
     }
@@ -133,8 +134,8 @@ namespace Sony
             _sonydll.SetAttachedLens(handle, path);
         }
 
-        public void SetFocusPosition(uint handle, uint position) {
-            _sonydll.SetFocusPosition(handle, position);
+        public uint SetFocusPosition(uint handle, uint position) {
+            return _sonydll.SetFocusPosition(handle, position);
         }
 
         public uint GetFocusPosition(uint handle) {

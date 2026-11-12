@@ -137,11 +137,24 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Tests {
             }
         }
 
-        public void SetFocusPosition(uint handle, uint position) {
+        /// <summary>Where a move to a position lands; the real DLL can stop short of the request.</summary>
+        public Func<uint, uint> FocusLanding { get; set; } = p => p;
+
+        /// <summary>When set, focus moves fail as the DLL does with a bad handle.</summary>
+        public bool FailFocusMoves { get; set; }
+
+        public uint SetFocusPosition(uint handle, uint position) {
             lock (_lock) {
                 FocusMoves.Add((handle, position));
-                _focus[handle] = position;
-                _lastFocus = position;
+
+                if (FailFocusMoves) {
+                    throw new SonyException($"Problem setting focus position to {position}, error 6");
+                }
+
+                var reached = FocusLanding(position);
+                _focus[handle] = reached;
+                _lastFocus = reached;
+                return reached;
             }
         }
 

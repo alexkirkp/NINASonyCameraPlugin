@@ -460,13 +460,16 @@ namespace Sony {
             return position;
         }
 
-        public void SetFocusPosition(UInt32 hCamera, UInt32 focusPosition) {
-//            Logger.Info($"Request to set focus position to {focusPosition} for hCamera {hCamera:x}");
-            UInt32 hr = fSetFocusPosition(hCamera, ref focusPosition);
+        /// <summary>Moves the lens; returns the position the DLL reached (it writes it back through the pointer).</summary>
+        public UInt32 SetFocusPosition(UInt32 hCamera, UInt32 focusPosition) {
+            UInt32 reached = focusPosition;
+            UInt32 hr = fSetFocusPosition(hCamera, ref reached);
 
             if (hr != ERROR_SUCCESS) {
                 throw new SonyException($"Problem setting focus position to {focusPosition}, error {hr}");
             }
+
+            return reached;
         }
 
         public UInt32 GetFocusLimit(UInt32 hCamera) {

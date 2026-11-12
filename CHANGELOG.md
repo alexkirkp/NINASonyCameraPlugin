@@ -1,5 +1,9 @@
 ﻿# Sony Camera Plugin
 
+## 1.0.0.6
+* A failed lens focus move is reported to NINA instead of being logged and ignored, so AutoFocus no longer measures at a position the lens never reached.
+* The focuser records the position the driver DLL says it reached, which can differ from the one requested.
+
 ## 1.0.0.5
 * Requires the Sony driver DLL 1.0.1.21 or later (was 1.0.1.17). The version check now compares the parts in the right order.
 * Notices a camera unplug and reconnects automatically for a configurable time (default 60 s); the lens focuser stays connected and exposures wait for the post-reconnect setup.

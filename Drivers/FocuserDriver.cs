@@ -141,14 +141,41 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 uint hCamera = GetCameraHandle();
 
                 if (hCamera != 0) {
-                    _moving = true;
-                    try {
-                        Driver.SetFocusPosition(hCamera, (uint)value);
-                        _lastKnownPosition = value;
-                    } finally {
-                        _moving = false;
+                    MoveTo(hCamera, value);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moves the lens and records where the DLL says it landed, which can be short of the request
+        /// (it stops when it is as close as its smallest nudge allows). A failed move throws, so NINA
+        /// sees it instead of measuring focus at a position the lens never reached.
+        /// </summary>
+        private int MoveTo(uint hCamera, int position) {
+            uint requested = (uint)Math.Max(0, position);
+            _moving = true;
+
+            try {
+                uint reached = Driver.SetFocusPosition(hCamera, requested);
+
+                if (reached == UNKNOWN_POSITION) {
+                    // Should not happen after a successful move; keep the request rather than the sentinel
+                    _lastKnownPosition = (int)requested;
+                } else {
+                    _lastKnownPosition = (int)reached;
+
+                    if (reached != requested) {
+                        Logger.Debug($"Sony lens focuser: asked for {requested}, the DLL reached {reached}");
                     }
                 }
+
+                _unknownLogged = false;
+                return _lastKnownPosition;
+            } catch (SonyException ex) {
+                Logger.Error($"Sony lens focuser: move to {requested} failed: {ex.Message}");
+                throw;
+            } finally {
+                _moving = false;
             }
         }
 
@@ -281,15 +308,12 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 return;
             }
 
-            _moving = true;
             try {
-                Driver.SetFocusPosition(hCamera, (uint)last);
-                _unknownLogged = false;
-                Logger.Info($"Sony lens focuser: restored position {last} after camera reconnect (DLL reported {position})");
+                int reached = MoveTo(hCamera, last);
+                Logger.Info($"Sony lens focuser: restored position {reached} after camera reconnect (DLL reported {position})");
             } catch (Exception ex) {
+                _lastKnownPosition = last;
                 Logger.Error($"Sony lens focuser: could not restore position {last} after reconnect: {ex.Message}; reporting the last known position until the next move");
-            } finally {
-                _moving = false;
             }
         }
 
@@ -301,24 +325,13 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         public Task Move(int position, CancellationToken ct, int waitInMs) {
             UInt32 hCamera = GetCameraHandle();
 
-            if (hCamera != 0) {
-                _moving = true;
-
-                return Task.Run(() => {
-                    try {
-                        Driver.SetFocusPosition(hCamera, (uint)position);
-                        _lastKnownPosition = position;
-                    } catch (Exception ex) {
-                        Logger.Error(ex);
-                    }
-
-                    _moving = false;
-                });
-            }
-            else
-            {
+            if (hCamera == 0) {
                 return Task.CompletedTask;
             }
+
+            // The DLL cannot stop a move once started, so cancellation is only honoured before it starts.
+            // A failed move faults the task so NINA reports it.
+            return Task.Run(() => { MoveTo(hCamera, position); }, ct);
         }
 
         public void SendCommandBlind(string command, bool raw) {
