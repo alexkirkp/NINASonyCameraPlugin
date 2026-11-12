@@ -37,7 +37,12 @@ namespace Sony {
         internal SonyException(string message) : base(message) { }
     }
 
-    internal class CameraUnpluggedException : SonyException {
+    /// <summary>The camera currently doesn't accept writes to this property (for example the mode dial is in charge).</summary>
+    internal class PropertyWriteRefusedException : SonyException {
+        internal PropertyWriteRefusedException(uint propertyId) : base("The camera refused to write property " + propertyId.ToString()) { }
+    }
+
+    internal class CameraUnpluggedException: SonyException {
         internal CameraUnpluggedException() : base("The camera was unplugged") { }
 
         internal CameraUnpluggedException(bool reconnecting) : base(reconnecting
@@ -51,6 +56,7 @@ namespace Sony {
         internal readonly int[] MINIMUM_DLL_VERSION = { 1, 0, 1, 17 };
 
         internal const UInt32 ERROR_SUCCESS = 0;
+        internal const UInt32 ERROR_ACCESS_DENIED = 5;
         internal const UInt32 ERROR_RETRY = 1237;
         internal const UInt32 INVALID_HANDLE_VALUE = 0xffffffff;
 
@@ -415,7 +421,13 @@ namespace Sony {
         }
 
         public void SetPropertyValue(UInt32 hCamera, UInt32 propertyId, UInt32 value) {
-            if (fSetPropertyValue(hCamera, propertyId, value) != ERROR_SUCCESS) {
+            uint hr = fSetPropertyValue(hCamera, propertyId, value);
+
+            if (hr == ERROR_ACCESS_DENIED) {
+                throw new PropertyWriteRefusedException(propertyId);
+            }
+
+            if (hr != ERROR_SUCCESS) {
                 throw new SonyException("Problem setting property " + propertyId.ToString() + " to " + value.ToString());
             }
         }

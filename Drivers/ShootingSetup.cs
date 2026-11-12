@@ -33,6 +33,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             var driver = SonyDriver.GetInstance();
             var problems = new List<string>();
 
+            LogProperties(driver, camera);
+
             if (s.SetManualExposureMode) {
                 // The dial has to hand control to the PC before the mode can be written
                 if (Has(camera, PROP_PC_CONTROL_MODE)) {
@@ -82,7 +84,33 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
             if (problems.Count > 0) {
                 Notification.ShowWarning("Sony camera setup not fully applied: " + string.Join(", ", problems) +
-                    ". See the NINA log. (A lens AF/MF switch on AF blocks the focus mode.)");
+                    ". See the NINA log.");
+            }
+        }
+
+        /// <summary>
+        /// Logs what the camera reports for each setup property (type, flags, current value and
+        /// allowed values), so a write that has no effect can be diagnosed from the log.
+        /// </summary>
+        private static void LogProperties(SonyDriver driver, SonyCameraInfo camera) {
+            foreach (var id in new[] { PROP_PC_CONTROL_MODE, PROP_EXPOSURE_MODE, PROP_DRIVE_MODE, PROP_FOCUS_MODE, PROP_APERTURE, PROP_SAVE_DESTINATION }) {
+                var info = camera.GetPropertyInfo(id);
+
+                if (info == null) {
+                    Logger.Info($"Shooting setup: 0x{id:X4} is not listed by the camera");
+                    continue;
+                }
+
+                string current;
+                try {
+                    var v = driver.GetProperty(camera.Handle, id);
+                    current = $"0x{v.Value:X} '{v.Text}'";
+                } catch (Exception ex) {
+                    current = "unreadable: " + ex.Message;
+                }
+
+                Logger.Info($"Shooting setup: 0x{id:X4} {info.Name} type=0x{info.DataType:X} flags=0x{info.Flags:X} current={current} allowed=[" +
+                    string.Join(", ", info.Options().Select(o => $"0x{o.Value:X}={o.Name}")) + "]");
             }
         }
 
@@ -131,8 +159,30 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         private static void Write(SonyDriver driver, SonyCameraInfo camera, uint id, uint value, string label, List<string> problems) {
             try {
-                driver.SetProperty(camera.Handle, id, value);
+                // Some properties (aperture) only become writable a moment after the mode change
+                // lands, so a refused write is retried briefly before giving up
+                for (int attempt = 1; ; attempt++) {
+                    try {
+                        driver.SetProperty(camera.Handle, id, value);
+                        break;
+                    } catch (PropertyWriteRefusedException) when (attempt < 5) {
+                        System.Threading.Thread.Sleep(400);
+                    }
+                }
+
+                // The DLL refuses writes the camera ignores, but read back anyway as a cheap check
+                var actual = driver.GetProperty(camera.Handle, id);
+
+                if (actual.Value != value) {
+                    Logger.Warning($"Shooting setup: {label} was not applied (0x{id:X4} wanted 0x{value:X}, camera still reports 0x{actual.Value:X} '{actual.Text}')");
+                    problems.Add(label);
+                    return;
+                }
+
                 Logger.Info($"Shooting setup: set {label} (0x{id:X4} = 0x{value:X})");
+            } catch (PropertyWriteRefusedException) {
+                Logger.Warning($"Shooting setup: the camera refused {label} (0x{id:X4} = 0x{value:X}); the mode dial or lens controls it");
+                problems.Add(label + " (the mode dial controls this)");
             } catch (Exception ex) {
                 Logger.Warning($"Shooting setup: could not set {label} (0x{id:X4} = 0x{value:X}): {ex.Message}");
                 problems.Add(label);

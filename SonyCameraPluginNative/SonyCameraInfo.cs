@@ -45,6 +45,10 @@ namespace Sony {
             }
         }
 
+        public ushort DataType { get { return _descriptor.Type; } }
+
+        public ushort Flags { get { return _descriptor.Flags; } }
+
         public override string ToString() {
             return $"(Id={_descriptor.Id}, Name={_descriptor.Name}, Type={_descriptor.Type})";
         }

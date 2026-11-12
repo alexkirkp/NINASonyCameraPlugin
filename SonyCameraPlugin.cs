@@ -161,7 +161,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera {
             }
         }
 
-        /// <summary>On connect, select manual focus (needed for NINA's focuser). A lens AF/MF switch set to AF blocks this.</summary>
+        /// <summary>On connect, select manual focus (needed for NINA's focuser).</summary>
         public bool SetManualFocus {
             get {
                 return Settings.Default.SetManualFocus;

@@ -23,7 +23,7 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                 <CheckBox VerticalAlignment="Center" IsChecked="{Binding SetManualFocus}" />
-                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Manual focus (the lens's AF/MF switch must be on MF)" />
+                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Manual focus" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                 <CheckBox VerticalAlignment="Center" IsChecked="{Binding SetWidestAperture}" />
