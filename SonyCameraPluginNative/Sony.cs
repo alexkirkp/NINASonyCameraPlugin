@@ -92,6 +92,11 @@ namespace Sony
         public byte[] GetLastImage() {
             return _sonydll.LastImage;
         }
+
+        public void ReleaseLastImage() {
+            _sonydll.ReleaseLastImage();
+        }
+
         public IEnumerable<SonyLens> Lenses() {
             int count = _sonydll.GetLensCount();
 

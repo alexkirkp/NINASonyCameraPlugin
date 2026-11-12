@@ -195,6 +195,11 @@ namespace Sony {
             }
         }
 
+        /// <summary>Drops the held copy of the last image once the caller has taken it.</summary>
+        internal void ReleaseLastImage() {
+            _lastImage = null;
+        }
+
         internal IntPtr GetExportedFunction(IntPtr hDll, string name) {
             IntPtr methodPointer = Kernel32.GetProcAddress(_dllHandle, name);
 
@@ -335,12 +340,15 @@ namespace Sony {
             int[] ids = new int[listSize];
             IntPtr pIds = Marshal.AllocCoTaskMem((int)listSize * sizeof(UInt32));
 
-            if (fGetPropertyList(hCamera, pIds, ref listSize) != ERROR_SUCCESS) {
-                throw new SonyException("Problem retrieving list of property ids");
-            }
+            try {
+                if (fGetPropertyList(hCamera, pIds, ref listSize) != ERROR_SUCCESS) {
+                    throw new SonyException("Problem retrieving list of property ids");
+                }
 
-            Marshal.Copy(pIds, ids, 0, (int)listSize);
-            Marshal.FreeCoTaskMem(pIds);
+                Marshal.Copy(pIds, ids, 0, (int)listSize);
+            } finally {
+                Marshal.FreeCoTaskMem(pIds);
+            }
 
             return ids;
         }

@@ -81,8 +81,21 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 }
             }
 
-            Logger.Warning("Camera did not report any ISO options via known properties (registry ISO list may be empty until the camera learns it).");
+            LogNoIsoOptionsOnce();
             return Array.Empty<PropertyValueOption>();
+        }
+
+        // The camera instance the missing-ISO-list problem was last logged for; a new connect gets a new instance
+        private SonyCameraInfo _noIsoLoggedFor;
+
+        private void LogNoIsoOptionsOnce() {
+            var camera = _camera;
+            if (camera == null || ReferenceEquals(_noIsoLoggedFor, camera)) {
+                return;
+            }
+
+            _noIsoLoggedFor = camera;
+            Logger.Warning("Camera did not report any ISO options via known properties (registry ISO list may be empty until the camera learns it); gain is unavailable.");
         }
 
         private const uint IsoAuto = 0x00FFFFFF; // camera's AUTO ISO; NINA sees it as gain 0
@@ -262,9 +275,6 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             get {
                 var isoOptions = GetAvailableIsoOptions();
                 if (!isoOptions.Any()) {
-                    if (_camera != null) {
-                        Logger.Error("Problem getting gain max: camera did not report ISO options.");
-                    }
                     return -1;
                 }
 
@@ -277,9 +287,6 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             get {
                 var isoOptions = GetAvailableIsoOptions();
                 if (!isoOptions.Any()) {
-                    if (_camera != null) {
-                        Logger.Error("Problem getting gain min: camera did not report ISO options.");
-                    }
                     return -1;
                 }
 
@@ -843,6 +850,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 }
 
                 BeginCapture(sequence);
+            } else {
+                throw new SonyException("Cannot start an exposure: no camera is connected");
             }
         }
 
@@ -851,7 +860,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             uint captureStatus = driver.GetCaptureStatus(_camera.Handle);
 
             if (captureStatus == CAPTURE_CAPTURING || captureStatus == CAPTURE_PROCESSING || captureStatus == CAPTURE_STARTING ||
-                captureStatus == CAPTURE_READING || captureStatus == CAPTURE_PROCESSING) {
+                captureStatus == CAPTURE_READING) {
                 Notification.ShowWarning("Another exposure still in progress. Cancelling it to start another.");
             }
 
@@ -974,6 +983,10 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         }
 
         public async Task WaitUntilExposureIsReady(CancellationToken token) {
+            if (_camera == null) {
+                throw new SonyException("Cannot wait for an exposure: no camera is connected");
+            }
+
             using (token.Register(AbortExposure)) {
                 uint[] completionStates = { CAPTURE_CANCELLED, CAPTURE_COMPLETE, CAPTURE_FAILED };
 
@@ -1036,12 +1049,17 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                 var metaData = new ImageMetaData();
 
-                return _exposureDataFactory.CreateRAWExposureData(
+                var exposure = _exposureDataFactory.CreateRAWExposureData(
                     converter: _profileService.ActiveProfile.CameraSettings.RawConverter,
                     rawBytes: rawImageData,
                     rawType: "arw",
                     bitDepth: this.BitDepth,
                     metaData: metaData);
+
+                // NINA owns the image now; don't keep a second 50-100 MB copy until the next capture
+                SonyDriver.GetInstance().ReleaseLastImage();
+
+                return exposure;
             });
         }
         #endregion
