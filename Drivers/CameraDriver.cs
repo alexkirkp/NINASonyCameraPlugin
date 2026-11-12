@@ -457,9 +457,9 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                             _device = device;
                             _camera = reopened;
-                            _dropStartedUtc = null;
                             _deadHandleClosed = false;
-                            _removalLogged = false;
+                            // _dropStartedUtc stays set: the link reports Reconnecting (so exposures
+                            // and property calls are deferred) until the setup below has finished.
                         }
 
                         try {
@@ -468,8 +468,11 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                             Logger.Error(ex);
                         }
 
-                        var gain = _pendingGain;
-                        _pendingGain = null;
+                        int? gain;
+                        lock (_linkLock) {
+                            gain = _pendingGain;
+                            _pendingGain = null;
+                        }
 
                         if (gain != null) {
                             try {
@@ -477,6 +480,15 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                             } catch (Exception ex) {
                                 Logger.Error($"Problem setting gain to {gain} after reconnect", ex);
                             }
+                        }
+
+                        lock (_linkLock) {
+                            if (token.IsCancellationRequested) {
+                                return; // Disconnect() ran during the setup
+                            }
+
+                            _dropStartedUtc = null; // only now is the link usable again
+                            _removalLogged = false;
                         }
 
                         var seconds = (DateTime.UtcNow - started).TotalSeconds;
