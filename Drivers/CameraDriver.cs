@@ -53,6 +53,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             _profileService = profileService;
             _exposureDataFactory = exposureDataFactory;
             _device = device;
+            _id = device.UniqueId;
         }
 
         #region Internal Helpers
@@ -342,7 +343,10 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             }
         }
 
-        public string Id => "Sony";
+        // Fixed when the driver is created so a post-replug device swap never changes the Id NINA holds
+        private string _id;
+
+        public string Id => _id;
 
         public string Name {
             get => _device.Model;

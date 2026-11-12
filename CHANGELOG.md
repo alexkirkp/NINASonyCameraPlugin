@@ -1,5 +1,8 @@
 ﻿# Sony Camera Plugin
 
+## Unreleased
+* Each camera now has its own Id (model plus USB instance), so several Sony bodies can be told apart. Existing profiles need the camera selected once more.
+
 ## 1.0.0.4
 * Added the `UpdateSubSampleArea` implementation and bumped the minimum NINA version so the plugin loads in 3.2.
 * Restored the ISO/Gain UI by notifying NINA whenever the camera connection updates ISO data and by handling cameras without ISO option lists.
