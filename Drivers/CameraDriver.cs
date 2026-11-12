@@ -84,6 +84,11 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             return Array.Empty<PropertyValueOption>();
         }
 
+        private const uint IsoAuto = 0x00FFFFFF; // camera's AUTO ISO; NINA sees it as gain 0
+
+        // NINA's gain 0 means AUTO; everything else is a literal ISO value
+        private static uint GainToIso(int gain) => gain <= 0 ? IsoAuto : (uint)gain;
+
         private void NotifyGainPropertiesChanged() {
             RaisePropertyChanged(nameof(CanGetGain));
             RaisePropertyChanged(nameof(CanSetGain));
@@ -262,7 +267,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                     return -1;
                 }
 
-                return (int)isoOptions.Last().Value;
+                var real = isoOptions.Where(o => o.Value != IsoAuto).ToList();
+                return real.Any() ? (int)real.Max(o => o.Value) : 0;
             }
         }
 
@@ -276,7 +282,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                     return -1;
                 }
 
-                return (int)isoOptions.Min(o => o.Value);
+                var real = isoOptions.Where(o => o.Value != IsoAuto).ToList();
+                return real.Any() ? (int)real.Min(o => o.Value) : 0;
             }
         }
 
@@ -308,7 +315,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                             return;
                         }
 
-                        SonyDriver.GetInstance().SetProperty(_camera.Handle, PROPID_ISO, (uint)value);
+                        SonyDriver.GetInstance().SetProperty(_camera.Handle, PROPID_ISO, GainToIso(value));
                         RaisePropertyChanged(nameof(Gain));
                     } catch (CameraUnpluggedException) {
                         // Window ran out; nothing to set on a camera that is gone
@@ -476,7 +483,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                         if (gain != null) {
                             try {
-                                driver.SetProperty(reopened.Handle, PROPID_ISO, (uint)gain.Value);
+                                driver.SetProperty(reopened.Handle, PROPID_ISO, GainToIso(gain.Value));
                             } catch (Exception ex) {
                                 Logger.Error($"Problem setting gain to {gain} after reconnect", ex);
                             }
