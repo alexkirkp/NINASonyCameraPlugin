@@ -109,6 +109,18 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Properties {
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool ElectronicShutterForSnapshots {
+            get {
+                return ((bool)(this["ElectronicShutterForSnapshots"]));
+            }
+            set {
+                this["ElectronicShutterForSnapshots"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("0")]
         public int SaveDestination {
             get {

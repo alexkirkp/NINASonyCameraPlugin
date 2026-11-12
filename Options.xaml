@@ -30,6 +30,10 @@
                 <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Widest aperture the lens reports" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                <CheckBox VerticalAlignment="Center" IsChecked="{Binding ElectronicShutterForSnapshots}" />
+                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Text="Electronic shutter for snapshot exposures (autofocus, plate solving; no BULB, so 30 s at most)" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                 <TextBlock VerticalAlignment="Center" Text="Save images to (0 = leave, 1 = PC only, 2 = PC + card)" />
                 <TextBox MinWidth="30" Margin="10,0,0,0" VerticalAlignment="Center" Text="{Binding SaveDestination, UpdateSourceTrigger=LostFocus}" />
             </StackPanel>

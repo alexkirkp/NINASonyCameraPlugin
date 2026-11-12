@@ -185,6 +185,18 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera {
             }
         }
 
+        /// <summary>Snapshot exposures (autofocus, plate solving, alignment) use the electronic shutter; everything else uses the mechanical one.</summary>
+        public bool ElectronicShutterForSnapshots {
+            get {
+                return Settings.Default.ElectronicShutterForSnapshots;
+            }
+            set {
+                Settings.Default.ElectronicShutterForSnapshots = value;
+                CoreUtil.SaveSettings(Settings.Default);
+                RaisePropertyChanged();
+            }
+        }
+
         /// <summary>On connect, where images are saved: 0 = leave as is, 1 = PC only, 2 = PC + card. Card only is never offered, as no image would reach NINA.</summary>
         public int SaveDestination {
             get {

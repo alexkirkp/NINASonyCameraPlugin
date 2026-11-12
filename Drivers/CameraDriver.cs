@@ -826,6 +826,9 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
             double exposureTime = sequence.ExposureTime;
 
+            // The shutter type has to be set before the shutter speed: the electronic shutter has no BULB
+            SetShutterType(driver, sequence, exposureTime);
+
             // Set the shutter speed (BULB above 30 s) rather than shooting at whatever the camera was left on
             try {
                 driver.SetExposureTime(_camera.Handle, (float)exposureTime);
@@ -836,6 +839,41 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             }
 
             driver.StartCapture(_camera.Handle, (float)exposureTime);
+        }
+
+        private const uint PROPERTY_SHUTTER_TYPE = 0xD0DF; // 2 = mechanical, 3 = electronic
+        private const uint SHUTTER_MECHANICAL = 2;
+        private const uint SHUTTER_ELECTRONIC = 3;
+
+        /// <summary>
+        /// With the option on, snapshot exposures use the electronic shutter and everything else the
+        /// mechanical one. Only writes when the type needs to change; cameras without the property
+        /// are left alone. A failure is logged, not fatal: the exposure still runs.
+        /// </summary>
+        private void SetShutterType(SonyDriver driver, CaptureSequence sequence, double exposureTime) {
+            if (!PluginSettings.Default.ElectronicShutterForSnapshots) {
+                return;
+            }
+
+            try {
+                if (_camera.GetPropertyInfo(PROPERTY_SHUTTER_TYPE) == null) {
+                    return;
+                }
+
+                // The electronic shutter has no BULB, so a long snapshot stays mechanical
+                bool snapshot = string.Equals(sequence.ImageType, "SNAPSHOT", StringComparison.OrdinalIgnoreCase);
+                uint wanted = snapshot && exposureTime <= LONGEST_TIMED_SPEED ? SHUTTER_ELECTRONIC : SHUTTER_MECHANICAL;
+                var current = driver.GetProperty(_camera.Handle, PROPERTY_SHUTTER_TYPE);
+
+                if (current.Id == PROPERTY_SHUTTER_TYPE && current.Value == wanted) {
+                    return;
+                }
+
+                Logger.Info($"Setting shutter type to {(wanted == SHUTTER_ELECTRONIC ? "electronic" : "mechanical")} for a {sequence.ImageType} exposure of {exposureTime}s");
+                driver.SetProperty(_camera.Handle, PROPERTY_SHUTTER_TYPE, wanted);
+            } catch (Exception e) {
+                Logger.Warning($"Could not set the shutter type: {e.Message}");
+            }
         }
 
         private const uint PROPERTY_SHUTTER_SPEED = 0xD20D;
