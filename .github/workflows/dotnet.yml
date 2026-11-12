@@ -38,6 +38,9 @@ jobs:
     - name: Build
       run: msbuild.exe NINASonyCameraPlugin.sln /nologo /nr:false /p:DeployOnBuild=true /p:DeployDefaultTarget=WebPublish /p:WebPublishMethod=FileSystem /p:DeleteExistingFiles=True /p:platform="Any CPU" /p:configuration="Release" /p:PublishUrl="../_build"
 
+    - name: Test
+      run: dotnet test NINASonyCameraPlugin.Tests/NINASonyCameraPlugin.Tests.csproj --configuration Release --nologo
+
     - name: Upload SonyCamera DLL
       uses: actions/upload-artifact@v4
       with:

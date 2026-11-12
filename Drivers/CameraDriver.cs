@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -49,10 +49,20 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         private short _readoutModeForNormalImages;
         private AsyncObservableCollection<BinningMode> _binningModes;
 
-        public CameraDriver(IProfileService profileService, IExposureDataFactory exposureDataFactory, SonyDevice device) {
+        // Null means the real native driver; tests pass a fake
+        private readonly ISonyDriver _driver;
+
+        private ISonyDriver Driver => _driver ?? SonyDriver.GetInstance();
+
+        public CameraDriver(IProfileService profileService, IExposureDataFactory exposureDataFactory, SonyDevice device)
+            : this(profileService, exposureDataFactory, device, null) {
+        }
+
+        internal CameraDriver(IProfileService profileService, IExposureDataFactory exposureDataFactory, SonyDevice device, ISonyDriver driver) {
             _profileService = profileService;
             _exposureDataFactory = exposureDataFactory;
             _device = device;
+            _driver = driver;
             _id = device.UniqueId;
         }
 
@@ -60,7 +70,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         private PropertyValue GetPropertyValue(uint id) {
             ThrowIfNotUsable();
-            return SonyDriver.GetInstance().GetProperty(_camera.Handle, id);
+            return Driver.GetProperty(_camera.Handle, id);
         }
 
         private IReadOnlyList<PropertyValueOption> GetAvailableIsoOptions() {
@@ -323,7 +333,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                             return;
                         }
 
-                        SonyDriver.GetInstance().SetProperty(_camera.Handle, PROPID_ISO, GainToIso(value));
+                        Driver.SetProperty(_camera.Handle, PROPID_ISO, GainToIso(value));
                         RaisePropertyChanged(nameof(Gain));
                     } catch (CameraUnpluggedException) {
                         // Window ran out; nothing to set on a camera that is gone
@@ -387,7 +397,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         private int? _pendingGain;                  // gain NINA set during the window
         private CaptureSequence _pendingExposure;  // started during the window; begun once reconnected
 
-        private static readonly TimeSpan ReconnectRetryInterval = TimeSpan.FromSeconds(2);
+        internal TimeSpan ReconnectRetryInterval { get; set; } = TimeSpan.FromSeconds(2);
 
         /// <summary>
         /// Combines the DLL's removed flag with the reconnect state. The first time a removal is seen
@@ -443,7 +453,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         }
 
         private async Task ReconnectLoop(SonyCameraInfo oldCamera, DateTime started, TimeSpan window, CancellationToken token) {
-            var driver = SonyDriver.GetInstance();
+            var driver = Driver;
 
             try {
                 driver.CloseCamera(oldCamera.Handle);
@@ -481,7 +491,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                         }
 
                         try {
-                            ShootingSetup.Apply(reopened); // connect-time settings are lost with the old handle
+                            ShootingSetup.Apply(reopened, driver); // connect-time settings are lost with the old handle
                         } catch (Exception ex) {
                             Logger.Error(ex);
                         }
@@ -553,7 +563,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         /// Finds the camera again after a replug: the same device id if it is still there, otherwise
         /// the one device of the same make and model.
         /// </summary>
-        private SonyDevice FindDevice(SonyDriver driver) {
+        private SonyDevice FindDevice(ISonyDriver driver) {
             var devices = driver.Cameras().ToList();
 
             return devices.FirstOrDefault(d => d.Id == _device.Id)
@@ -615,7 +625,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             }
 
             try {
-                bool removed = SonyDriver.GetInstance().IsCameraRemoved(camera.Handle);
+                bool removed = Driver.IsCameraRemoved(camera.Handle);
 
                 if (removed && !_removalLogged) {
                     _removalLogged = true;
@@ -750,7 +760,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             return Task.Run<bool>(() => {
                 try {
                     ResetLinkState();
-                    _camera = SonyDriver.GetInstance().OpenCamera(_device.Id);
+                    _camera = Driver.OpenCamera(_device.Id);
                 } catch (Exception ex) {
                     Logger.Error(ex);
                     _camera = null;
@@ -758,7 +768,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                 if (_camera != null) {
                     try {
-                        ShootingSetup.Apply(_camera);
+                        ShootingSetup.Apply(_camera, _driver);
                     } catch (Exception ex) {
                         // Never fail the connect over setup
                         Logger.Error(ex);
@@ -782,7 +792,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                 if (!alreadyClosed) {
                     try {
-                        SonyDriver.GetInstance().CloseCamera(_camera.Handle);
+                        Driver.CloseCamera(_camera.Handle);
                     } catch (Exception ex) {
                         Logger.Error(ex);
                     }
@@ -801,7 +811,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             return Task.Run<IExposureData>(() => {
                 ThrowIfNotUsable();
 
-                using (var memStream = new MemoryStream(SonyDriver.GetInstance().GetLiveView(_camera.Handle))) {
+                using (var memStream = new MemoryStream(Driver.GetLiveView(_camera.Handle))) {
                     memStream.Position = 0;
 
                     JpegBitmapDecoder decoder =
@@ -856,7 +866,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         }
 
         private void BeginCapture(CaptureSequence sequence) {
-            SonyDriver driver = SonyDriver.GetInstance();
+            ISonyDriver driver = Driver;
             uint captureStatus = driver.GetCaptureStatus(_camera.Handle);
 
             if (captureStatus == CAPTURE_CAPTURING || captureStatus == CAPTURE_PROCESSING || captureStatus == CAPTURE_STARTING ||
@@ -894,7 +904,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         /// mechanical one. Only writes when the type needs to change; cameras without the property
         /// are left alone. A failure is logged, not fatal: the exposure still runs.
         /// </summary>
-        private void SetShutterType(SonyDriver driver, CaptureSequence sequence, double exposureTime) {
+        private void SetShutterType(ISonyDriver driver, CaptureSequence sequence, double exposureTime) {
             if (!PluginSettings.Default.ElectronicShutterForSnapshots) {
                 return;
             }
@@ -941,7 +951,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         /// no BULB, so a long request lands on 30"). Read the speed back and refuse to shoot if it
         /// can't give the requested length.
         /// </summary>
-        private void VerifyShutterSpeed(SonyDriver driver, double exposureTime) {
+        private void VerifyShutterSpeed(ISonyDriver driver, double exposureTime) {
             if (exposureTime <= LONGEST_TIMED_SPEED) {
                 try {
                     var set = driver.GetProperty(_camera.Handle, PROPERTY_SHUTTER_SPEED);
@@ -978,7 +988,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
             // Nothing to cancel on a camera that is gone or being reopened
             if (_camera != null && GetLinkState() == LinkState.Ok) {
-                SonyDriver.GetInstance().CancelCapture(_camera.Handle);
+                Driver.CancelCapture(_camera.Handle);
             }
         }
 
@@ -990,7 +1000,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             using (token.Register(AbortExposure)) {
                 uint[] completionStates = { CAPTURE_CANCELLED, CAPTURE_COMPLETE, CAPTURE_FAILED };
 
-                SonyDriver driver = SonyDriver.GetInstance();
+                ISonyDriver driver = Driver;
                 uint finalStatus = CAPTURE_CREATED;
 
                 try {
@@ -1041,7 +1051,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         public Task<IExposureData> DownloadExposure(CancellationToken token) {
             return Task.Run<IExposureData>(() => {
-                byte[] rawImageData = SonyDriver.GetInstance().GetLastImage();
+                byte[] rawImageData = Driver.GetLastImage();
 
                 if (rawImageData == null) {
                     throw new SonyException("No image available from the camera");
@@ -1057,7 +1067,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                     metaData: metaData);
 
                 // NINA owns the image now; don't keep a second 50-100 MB copy until the next capture
-                SonyDriver.GetInstance().ReleaseLastImage();
+                Driver.ReleaseLastImage();
 
                 return exposure;
             });

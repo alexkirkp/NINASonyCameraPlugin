@@ -7,7 +7,27 @@ using System.Threading.Tasks;
 namespace Sony
 {
     #region SonyBase
-    public class SonyDriver {
+    /// <summary>
+    /// The part of the native driver the camera driver uses. Exists so the camera driver's link-state
+    /// logic can run against a fake in tests.
+    /// </summary>
+    public interface ISonyDriver {
+        IEnumerable<SonyDevice> Cameras();
+        SonyCameraInfo OpenCamera(string path);
+        void CloseCamera(uint handle);
+        PropertyValue GetProperty(uint handle, uint propertyId);
+        void SetProperty(uint handle, uint propertyId, uint value);
+        byte[] GetLiveView(uint handle);
+        uint GetCaptureStatus(uint handle);
+        void SetExposureTime(uint handle, float exposureTime);
+        void StartCapture(uint handle, float exposureTime);
+        void CancelCapture(uint handle);
+        bool IsCameraRemoved(uint handle);
+        byte[] GetLastImage();
+        void ReleaseLastImage();
+    }
+
+    public class SonyDriver : ISonyDriver {
         private static readonly Lazy<SonyDriver> _instance = new Lazy<SonyDriver>(() => new SonyDriver());
 
         private SonyMTPCameraDll _sonydll;

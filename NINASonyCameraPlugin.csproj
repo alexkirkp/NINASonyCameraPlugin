@@ -40,6 +40,9 @@
     <PackageReference Include="Zlib.Portable.Signed" Version="1.11.0" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="NINASonyCameraPlugin.Tests\**" />
+    <EmbeddedResource Remove="NINASonyCameraPlugin.Tests\**" />
+    <None Remove="NINASonyCameraPlugin.Tests\**" />
     <Compile Remove="SonyCameraPluginNative\obj\Debug\.NETFramework,Version=v4.8.AssemblyAttributes.cs" />
     <Compile Remove="SonyCameraPluginNative\obj\Release\.NETFramework,Version=v4.8.AssemblyAttributes.cs" />
   </ItemGroup>

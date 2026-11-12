@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 
 // [MANDATORY] The name of your plugin
 [assembly: AssemblyTitle("Sony Camera Plugin")]
+[assembly: InternalsVisibleTo("NINASonyCameraPlugin.Tests")]
 // [MANDATORY] A short description of your plugin
 [assembly: AssemblyDescription("Support for Sony Cameras (and optionally, Camera controlled lenses)")]
 

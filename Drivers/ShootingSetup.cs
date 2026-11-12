@@ -28,9 +28,9 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         private const uint SAVE_PC_ONLY = 0x01;
         private const uint SAVE_PC_AND_CARD = 0x11;
 
-        internal static void Apply(SonyCameraInfo camera) {
+        internal static void Apply(SonyCameraInfo camera, ISonyDriver driver = null) {
             var s = PluginSettings.Default;
-            var driver = SonyDriver.GetInstance();
+            driver = driver ?? SonyDriver.GetInstance();
             var problems = new List<string>();
 
             LogProperties(driver, camera);
@@ -92,7 +92,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         /// Logs what the camera reports for each setup property (type, flags, current value and
         /// allowed values), so a write that has no effect can be diagnosed from the log.
         /// </summary>
-        private static void LogProperties(SonyDriver driver, SonyCameraInfo camera) {
+        private static void LogProperties(ISonyDriver driver, SonyCameraInfo camera) {
             foreach (var id in new[] { PROP_PC_CONTROL_MODE, PROP_EXPOSURE_MODE, PROP_DRIVE_MODE, PROP_FOCUS_MODE, PROP_APERTURE, PROP_SAVE_DESTINATION }) {
                 var info = camera.GetPropertyInfo(id);
 
@@ -127,7 +127,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         /// Writes the wanted value, or the allowed option whose name matches, since the a6700's USB
         /// value widths differ from the Wi-Fi ones.
         /// </summary>
-        private static void WriteMatching(SonyDriver driver, SonyCameraInfo camera, uint id, string label, uint wanted, string[] names, List<string> problems) {
+        private static void WriteMatching(ISonyDriver driver, SonyCameraInfo camera, uint id, string label, uint wanted, string[] names, List<string> problems) {
             var info = camera.GetPropertyInfo(id);
 
             if (info == null) {
@@ -157,7 +157,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             Write(driver, camera, id, value, label, problems);
         }
 
-        private static void Write(SonyDriver driver, SonyCameraInfo camera, uint id, uint value, string label, List<string> problems) {
+        private static void Write(ISonyDriver driver, SonyCameraInfo camera, uint id, uint value, string label, List<string> problems) {
             try {
                 // Some properties (aperture) only become writable a moment after the mode change
                 // lands, so a refused write is retried briefly before giving up
