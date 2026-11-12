@@ -401,6 +401,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 }
 
                 _dropStartedUtc = DateTime.UtcNow;
+                CameraLink.Reconnecting = true;
                 _reconnected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _reconnectCts = new CancellationTokenSource();
 
@@ -482,6 +483,14 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                         Logger.Warning($"Sony camera reconnected after {seconds:0} s");
                         Notification.ShowWarning($"Sony camera was unplugged and reconnected after {seconds:0} s");
                         NotifyGainPropertiesChanged();
+                        CameraLink.Reconnecting = false;
+
+                        try {
+                            CameraLink.RaiseReconnected(reopened.Handle); // re-attach the lens focuser
+                        } catch (Exception ex) {
+                            Logger.Error(ex);
+                        }
+
                         _reconnected.TrySetResult(true);
                         return;
                     }
@@ -502,6 +511,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
             lock (_linkLock) {
                 _gaveUp = true;
+                CameraLink.Reconnecting = false;
             }
 
             Logger.Error($"Sony camera did not come back within {window.TotalSeconds:0} s; reporting it as disconnected");
@@ -527,6 +537,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 cts = _reconnectCts;
                 _reconnectCts = null;
                 _dropStartedUtc = null;
+                CameraLink.Reconnecting = false;
                 _gaveUp = false;
                 _removalLogged = false;
                 _pendingExposure = null;

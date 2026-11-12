@@ -133,6 +133,11 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 if (_connected) {
                     UInt32 hCamera = GetCameraHandle();
 
+                    if (hCamera == 0 && CameraLink.Reconnecting) {
+                        // The camera is being reconnected; stay connected so NINA keeps the focuser
+                        return true;
+                    }
+
                     if (hCamera == 0) {
                         Logger.Debug("Sony camera was disconnected without closing focuser first, cleaning up");
                         _connected = false;
@@ -168,6 +173,9 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                     _moving = true;
                     SonyDriver.GetInstance().SetAttachedLens(hCamera, Id);
                     _moving = false;
+
+                    CameraLink.Reconnected -= OnCameraReconnected;
+                    CameraLink.Reconnected += OnCameraReconnected;
                 } else {
                     Notification.ShowWarning(Loc.Instance["LblNoCameraConnected"]);
                 }
@@ -177,8 +185,25 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         }
 
         public void Disconnect() {
+            CameraLink.Reconnected -= OnCameraReconnected;
             _moving = false;
             _connected = false;
+        }
+
+        /// <summary>The camera came back after an unplug: attach the lens to the new handle.</summary>
+        private void OnCameraReconnected(uint hCamera) {
+            if (!_connected) {
+                return;
+            }
+
+            try {
+                SonyDriver.GetInstance().SetAttachedLens(hCamera, Id);
+                Logger.Info("Sony lens focuser re-attached after camera reconnect");
+            } catch (Exception ex) {
+                Logger.Error($"Sony lens focuser could not re-attach after reconnect: {ex.Message}; marking the focuser disconnected");
+                _connected = false;
+                _moving = false;
+            }
         }
 
         public void Halt() {
