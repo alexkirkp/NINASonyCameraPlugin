@@ -37,18 +37,6 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("This is a notification")]
-        public string DefaultNotificationMessage {
-            get {
-                return ((string)(this["DefaultNotificationMessage"]));
-            }
-            set {
-                this["DefaultNotificationMessage"] = value;
-            }
-        }
-
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("60")]
         public int ReconnectGraceSeconds {
             get {

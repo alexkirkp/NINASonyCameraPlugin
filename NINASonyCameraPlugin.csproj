@@ -9,42 +9,12 @@
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="ReachFramework" />
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="NINA.Plugin" Version="3.2.0.3001-rc" />
-    <PackageReference Include="System.ComponentModel.Composition" Version="8.0.0" />
-    <PackageReference Include="System.Data.DataSetExtensions" Version="4.6.0-preview3.19128.7" />
-    <PackageReference Include="EntityFramework" Version="6.4.4" />
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Collections.Immutable" Version="8.0.0" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Accord" Version="3.8.2-alpha" />
-    <PackageReference Include="Accord.Imaging" Version="3.8.2-alpha" />
-    <PackageReference Include="Accord.Math" Version="3.8.2-alpha" />
-    <PackageReference Include="Accord.Statistics" Version="3.8.2-alpha" />
-    <PackageReference Include="AsyncEnumerator" Version="4.0.2" />
-    <PackageReference Include="Castle.Core.AsyncInterceptor" Version="2.1.0" />
-    <PackageReference Include="CommonServiceLocator" Version="2.0.7" />
-    <PackageReference Include="CSharpFITS" Version="1.1.0" />
-    <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
-    <PackageReference Include="SHA3" Version="1.0.0" />
-    <PackageReference Include="SharpGIS.NmeaParser" Version="2.2.2" />
-    <PackageReference Include="System.Windows.Interactivity.WPF" Version="2.0.20525" />
-    <PackageReference Include="ToggleSwitch" Version="1.2.0" />
-    <PackageReference Include="VVVV.FreeImage" Version="3.15.1.1" />
-    <PackageReference Include="Zlib.Portable.Signed" Version="1.11.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="NINASonyCameraPlugin.Tests\**" />
     <EmbeddedResource Remove="NINASonyCameraPlugin.Tests\**" />
     <None Remove="NINASonyCameraPlugin.Tests\**" />
-    <Compile Remove="SonyCameraPluginNative\obj\Debug\.NETFramework,Version=v4.8.AssemblyAttributes.cs" />
-    <Compile Remove="SonyCameraPluginNative\obj\Release\.NETFramework,Version=v4.8.AssemblyAttributes.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Update="Properties\Resources.Designer.cs">

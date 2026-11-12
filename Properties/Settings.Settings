@@ -5,9 +5,6 @@
     <Setting Name="UpdateSettings" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
-    <Setting Name="DefaultNotificationMessage" Type="System.String" Scope="User">
-      <Value Profile="(Default)">This is a notification</Value>
-    </Setting>
     <Setting Name="ReconnectGraceSeconds" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">60</Value>
     </Setting>
