@@ -52,7 +52,7 @@ namespace Sony {
 
     #region DLL Class
     internal class SonyMTPCameraDll {
-        internal const string MINIMUM_DLL_VERSION_STRING = "1.0.1.17";
+        internal const string MINIMUM_DLL_VERSION_STRING = "1.0.1.21";
 
         internal const UInt32 ERROR_SUCCESS = 0;
         internal const UInt32 ERROR_ACCESS_DENIED = 5;

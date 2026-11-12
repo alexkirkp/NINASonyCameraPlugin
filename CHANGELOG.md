@@ -1,7 +1,16 @@
 ﻿# Sony Camera Plugin
 
-## Unreleased
+## 1.0.0.5
+* Requires the Sony driver DLL 1.0.1.21 or later (was 1.0.1.17). The version check now compares the parts in the right order.
+* Notices a camera unplug and reconnects automatically for a configurable time (default 60 s); the lens focuser stays connected and exposures wait for the post-reconnect setup.
+* New option: astro shooting setup applied on connect (manual exposure mode, single-shot drive, manual focus, widest aperture, save destination).
+* New option: electronic shutter for snapshot exposures.
+* The shutter speed is set from the exposure time and the list settles after a shutter type change.
+* A failed or cancelled exposure no longer returns a stale image.
+* Focuser read errors are reported as errors instead of a position of 6; the focuser no longer throws from `HasSetupDialog` or `Halt`.
+* AUTO ISO is selectable and the gain range is correct.
 * Each camera now has its own Id (model plus USB instance), so several Sony bodies can be told apart. Existing profiles need the camera selected once more.
+* Small driver fixes: exposure while unconnected, a buffer leak, a held image, log spam.
 
 ## 1.0.0.4
 * Added the `UpdateSubSampleArea` implementation and bumped the minimum NINA version so the plugin loads in 3.2.

@@ -8,8 +8,8 @@ using System.Runtime.InteropServices;
 
 // [MANDATORY] The assembly versioning
 //Should be incremented for each new release build of a plugin
-[assembly: AssemblyVersion("1.0.0.4")]
-[assembly: AssemblyFileVersion("1.0.0.4")]
+[assembly: AssemblyVersion("1.0.0.5")]
+[assembly: AssemblyFileVersion("1.0.0.5")]
 
 // [MANDATORY] The name of your plugin
 [assembly: AssemblyTitle("Sony Camera Plugin")]
@@ -63,7 +63,7 @@ using System.Runtime.InteropServices;
 ## Focuser
 * Support for over 15 different camera-mounted lenses. [See the list](https://github.com/dougforpres/ASCOMSonyCameraDriver/wiki/Supported-Lenses)
 
-*Note*: This addon uses the core (non-ASCOM) files present in the Sony ASCOM driver v1.0.1.17 and later, which must be installed for this addon to start up correctly. You can find the Sony ASCOM driver at [https://github.com/dougforpres/ASCOMSonyCameraDriver/releases](https://github.com/dougforpres/ASCOMSonyCameraDriver/releases).
+*Note*: This addon uses the core (non-ASCOM) files present in the Sony ASCOM driver v1.0.1.21 and later, which must be installed for this addon to start up correctly. You can find the Sony ASCOM driver at [https://github.com/dougforpres/ASCOMSonyCameraDriver/releases](https://github.com/dougforpres/ASCOMSonyCameraDriver/releases).
 
 ## Support
 The best way to get support is via email. You can find my email address by following the *Homepage* link above, or by looking at the bottom of the [ASCOM driver Troubleshooting page](https://github.com/dougforpres/ASCOMSonyCameraDriver/wiki/Troubleshooting).
