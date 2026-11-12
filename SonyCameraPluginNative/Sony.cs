@@ -25,6 +25,10 @@ namespace Sony
         bool IsCameraRemoved(uint handle);
         byte[] GetLastImage();
         void ReleaseLastImage();
+        void SetAttachedLens(uint handle, string path);
+        void SetFocusPosition(uint handle, uint position);
+        uint GetFocusPosition(uint handle);
+        uint GetFocusLimit(uint handle);
     }
 
     public class SonyDriver : ISonyDriver {

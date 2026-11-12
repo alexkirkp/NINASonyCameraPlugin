@@ -7,6 +7,7 @@
 * New option: electronic shutter for snapshot exposures.
 * The shutter speed is set from the exposure time and the list settles after a shutter type change.
 * A failed or cancelled exposure no longer returns a stale image.
+* After a camera reconnect the lens focuser moves back to its last known position, since the driver DLL forgets it on the new handle; the focuser never reports the DLL's 65535 "unknown" value, which had sent AutoFocus to the far focus limit.
 * Focuser read errors are reported as errors instead of a position of 6; the focuser no longer throws from `HasSetupDialog` or `Halt`.
 * AUTO ISO is selectable and the gain range is correct.
 * Each camera now has its own Id (model plus USB instance), so several Sony bodies can be told apart. Existing profiles need the camera selected once more.

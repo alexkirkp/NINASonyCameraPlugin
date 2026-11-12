@@ -12,6 +12,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Tests {
     /// Runs the camera driver's unplug / reconnect logic against a fake native driver. The tests share
     /// static state (plugin settings, CameraLink), so they live in one class and run one at a time.
     /// </summary>
+    [Collection(CameraLinkCollection.Name)]
     public class ReconnectTests : IDisposable {
         private const uint PropIso = 0xD21E;
         private const string DevicePath = @"\\?\usb#vid_054c&pid_0c03#sn1#{guid}";

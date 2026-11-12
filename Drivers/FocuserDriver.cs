@@ -30,10 +30,32 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         internal bool _moving = false;
         internal bool _connected = false;
 
-        public FocuserDriver(IProfileService profileService, SonyLens info) {
+        // DLL position reported when it has lost track of the lens (seen after a camera reconnect):
+        // the UINT16 sentinel. Anything above the focus limit is treated the same way.
+        internal const uint UNKNOWN_POSITION = 0xFFFF;
+
+        // Last position the DLL reported or a move reached; -1 until there is one. Kept across a
+        // camera reconnect, because the lens does not move while the USB link is down.
+        private volatile int _lastKnownPosition = -1;
+        private volatile bool _unknownLogged = false;
+
+        private readonly ISonyDriver _driver;
+        private readonly Func<uint> _cameraHandle;
+
+        private ISonyDriver Driver => _driver ?? SonyDriver.GetInstance();
+
+        public FocuserDriver(IProfileService profileService, SonyLens info) : this(profileService, info, null, null) {
+        }
+
+        /// <summary>Test seam: a driver and a camera-handle source in place of the native singleton.</summary>
+        internal FocuserDriver(IProfileService profileService, SonyLens info, ISonyDriver driver, Func<uint> cameraHandle) {
             _profileService = profileService;
             _info = info;
+            _driver = driver;
+            _cameraHandle = cameraHandle;
         }
+
+        internal int LastKnownPosition => _lastKnownPosition;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -55,6 +77,10 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         }
 
         private uint GetCameraHandle() {
+            if (_cameraHandle != null) {
+                return _cameraHandle();
+            }
+
             SonyCameraInfo camera = SonyDriver.GetInstance().CameraInfo;
 
             if (camera != null) {
@@ -71,7 +97,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                 uint hCamera = GetCameraHandle();
 
                 if (hCamera != 0) {
-                    return ReadFocusValue(() => SonyDriver.GetInstance().GetFocusLimit(hCamera));
+                    return ReadFocusValue(() => Driver.GetFocusLimit(hCamera));
                 }
                 else {
                     return 0;
@@ -85,11 +111,30 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             get {
                 uint hCamera = GetCameraHandle();
 
-                if (hCamera != 0) {
-                    return ReadFocusValue(() => SonyDriver.GetInstance().GetFocusPosition(hCamera));
-                } else {
+                if (hCamera == 0) {
                     return 0;
                 }
+
+                int position = ReadFocusValue(() => Driver.GetFocusPosition(hCamera));
+                int limit = ReadFocusValue(() => Driver.GetFocusLimit(hCamera));
+
+                if (IsKnownPosition(position, limit)) {
+                    _lastKnownPosition = position;
+                    _unknownLogged = false;
+                    return position;
+                }
+
+                // The DLL has lost track of the lens. Never hand its sentinel to NINA: AutoFocus would
+                // seed from it and drive the lens to the far limit.
+                int fallback = _lastKnownPosition >= 0 ? Math.Min(_lastKnownPosition, limit) : Math.Max(0, Math.Min(position, limit));
+
+                if (!_unknownLogged) {
+                    _unknownLogged = true;
+                    Logger.Warning($"Sony lens focuser: the DLL reported position {position} (limit {limit}); reporting {fallback} instead"
+                        + (_lastKnownPosition >= 0 ? " (last known position)" : " (no known position yet)"));
+                }
+
+                return fallback;
             }
 
             set {
@@ -97,11 +142,18 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                 if (hCamera != 0) {
                     _moving = true;
-                    SonyDriver.GetInstance().SetFocusPosition(hCamera, (uint)value);
-                    _moving = false;
+                    try {
+                        Driver.SetFocusPosition(hCamera, (uint)value);
+                        _lastKnownPosition = value;
+                    } finally {
+                        _moving = false;
+                    }
                 }
             }
         }
+
+        private static bool IsKnownPosition(int position, int limit) =>
+            position >= 0 && position != UNKNOWN_POSITION && position <= limit;
 
         public double StepSize { get => 1.0; }
 
@@ -165,7 +217,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
                     _connected = true;
 
                     _moving = true;
-                    SonyDriver.GetInstance().SetAttachedLens(hCamera, Id);
+                    Driver.SetAttachedLens(hCamera, Id);
                     _moving = false;
 
                     CameraLink.Reconnected -= OnCameraReconnected;
@@ -184,18 +236,59 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
             _connected = false;
         }
 
-        /// <summary>The camera came back after an unplug: attach the lens to the new handle.</summary>
-        private void OnCameraReconnected(uint hCamera) {
+        /// <summary>
+        /// The camera came back after an unplug: attach the lens to the new handle. The DLL forgets
+        /// the lens position on the new handle, so if it no longer knows it, move to the last known
+        /// position to give it back its bearings (the lens itself has not moved).
+        /// </summary>
+        internal void OnCameraReconnected(uint hCamera) {
             if (!_connected) {
                 return;
             }
 
             try {
-                SonyDriver.GetInstance().SetAttachedLens(hCamera, Id);
+                Driver.SetAttachedLens(hCamera, Id);
                 Logger.Info("Sony lens focuser re-attached after camera reconnect");
             } catch (Exception ex) {
                 Logger.Error($"Sony lens focuser could not re-attach after reconnect: {ex.Message}; marking the focuser disconnected");
                 _connected = false;
+                _moving = false;
+                return;
+            }
+
+            RestorePositionAfterReconnect(hCamera);
+        }
+
+        private void RestorePositionAfterReconnect(uint hCamera) {
+            int last = _lastKnownPosition;
+            int position = -1;
+            int limit = int.MaxValue;
+
+            try {
+                position = (int)Driver.GetFocusPosition(hCamera);
+                limit = (int)Driver.GetFocusLimit(hCamera);
+            } catch (SonyException ex) {
+                Logger.Debug($"Sony lens focuser: could not read the position after reconnect: {ex.Message}");
+            }
+
+            if (IsKnownPosition(position, limit)) {
+                _lastKnownPosition = position;
+                return;
+            }
+
+            if (last < 0) {
+                Logger.Warning($"Sony lens focuser: position unknown after reconnect (DLL reported {position}) and none was recorded before; it will be known after the next move");
+                return;
+            }
+
+            _moving = true;
+            try {
+                Driver.SetFocusPosition(hCamera, (uint)last);
+                _unknownLogged = false;
+                Logger.Info($"Sony lens focuser: restored position {last} after camera reconnect (DLL reported {position})");
+            } catch (Exception ex) {
+                Logger.Error($"Sony lens focuser: could not restore position {last} after reconnect: {ex.Message}; reporting the last known position until the next move");
+            } finally {
                 _moving = false;
             }
         }
@@ -213,7 +306,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
                 return Task.Run(() => {
                     try {
-                        SonyDriver.GetInstance().SetFocusPosition(hCamera, (uint)position);
+                        Driver.SetFocusPosition(hCamera, (uint)position);
+                        _lastKnownPosition = position;
                     } catch (Exception ex) {
                         Logger.Error(ex);
                     }

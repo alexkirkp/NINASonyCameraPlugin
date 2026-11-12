@@ -117,5 +117,45 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Tests {
         public byte[] GetLastImage() => null;
 
         public void ReleaseLastImage() { }
+
+        // Focus model, as the real DLL behaves: attaching the lens to a handle forgets the position
+        // (it reads 0xFFFF) until the first move on that handle.
+        private readonly Dictionary<uint, uint> _focus = new Dictionary<uint, uint>();
+        private uint _lastFocus = 0xFFFF;
+
+        public uint FocusLimit { get; set; } = 3120;
+        public List<(uint Handle, uint Position)> FocusMoves { get; } = new List<(uint, uint)>();
+        public List<(uint Handle, string LensId)> LensAttaches { get; } = new List<(uint, string)>();
+
+        /// <summary>False models a DLL that carries the position over to the new handle.</summary>
+        public bool ForgetFocusOnAttach { get; set; } = true;
+
+        public void SetAttachedLens(uint handle, string path) {
+            lock (_lock) {
+                LensAttaches.Add((handle, path));
+                _focus[handle] = ForgetFocusOnAttach ? 0xFFFFu : _lastFocus;
+            }
+        }
+
+        public void SetFocusPosition(uint handle, uint position) {
+            lock (_lock) {
+                FocusMoves.Add((handle, position));
+                _focus[handle] = position;
+                _lastFocus = position;
+            }
+        }
+
+        public uint GetFocusPosition(uint handle) {
+            lock (_lock) { return _focus.TryGetValue(handle, out var p) ? p : 0xFFFF; }
+        }
+
+        public uint GetFocusLimit(uint handle) {
+            lock (_lock) { return FocusLimit; }
+        }
+
+        /// <summary>Makes the DLL report a given raw position on a handle, as if it had read it.</summary>
+        public void ReportFocus(uint handle, uint position) {
+            lock (_lock) { _focus[handle] = position; _lastFocus = position; }
+        }
     }
 }
