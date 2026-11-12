@@ -117,7 +117,7 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
 
         public double Temperature { get => double.NaN; }
 
-        public bool HasSetupDialog => throw new NotImplementedException();
+        public bool HasSetupDialog => false;
 
         public string Id { get => _info.Id; }
 
@@ -207,7 +207,8 @@ namespace NINA.RetroKiwi.Plugin.SonyCamera.Drivers {
         }
 
         public void Halt() {
-            throw new NotImplementedException();
+            // The driver DLL has no call to stop a focus move, so there is nothing to do.
+            Logger.Debug("Sony lens focuser Halt requested; the DLL cannot stop a move, ignoring");
         }
 
         public Task Move(int position, CancellationToken ct, int waitInMs) {
